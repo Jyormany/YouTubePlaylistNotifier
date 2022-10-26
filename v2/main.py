@@ -391,12 +391,17 @@ try:
                                   nowSubsOverThousandStr = f'{nowSubsOverThousand}千'
                           
                               #文末生成
-                              if str(nowSubs)[-4:] == "0000":
+                              #X十万人丁度なら
+                              if str(nowSubs)[-5] == "00000":
                                   subsCongFirstStr = "㊗️"
-                                  subsCongLastStr = "🎉"
+                                  subsCongLastStr = "🥳"
+                              #X万人丁度なら
+                              elif str(nowSubs)[-4:] == "0000":
+                                  subsCongFirstStr = "🎊"
+                                  subsCongLastStr = "🥳"
                               else:
                                   subsCongFirstStr = ""
-                                  subsCongLastStr = "!!"
+                                  subsCongLastStr = "！"
 
                           #文字列生成
                           tweetSubsInfoText = f'《{subsCongFirstStr}登録者数{nowSubsOverTenThousandStr}{nowSubsOverThousandStr}人突破{subsCongLastStr}》\n'
