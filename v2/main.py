@@ -3,7 +3,7 @@ import os
 import function as qnly
 
 """
-使用するJSONファイル&データベース
+使用するデータベース
 
 データベース
 videoids :非公開等を除く検知した動画と状態
@@ -21,6 +21,11 @@ waiting :指定時間後に通知予定の指定時間中に検知した再生�
 
 subs :最後に通知したチャンネル登録者数
   └- subs : INT-8bit / 登録者数
+
+emoji :通知文に使用する絵文字(useがTrueで一番上の項目を使用)
+  ├- left : TEXT / 左側の絵文字
+  ├- right : TEXT / 右側の絵文字
+  └- use : bool / 使用可否
 """
 
 #環境変数として読み込む機密情報============================
@@ -96,7 +101,6 @@ try:
   #変数定義
   newViId = [] #新規追加予定リスト
   taskVideoIds = [] #変更を検知したvideoIDリスト配列
-  changedPls = [] #変更を検知した再生リストIDリスト配列
   recordTask = [] #履歴追記タスクリスト配列
   addTweetTitle = "" #ツイートの最初の行に追加される文字列
   updateSubs = False #登録者数更新有無
@@ -146,12 +150,17 @@ try:
         else:
           newPl = False
             
-          #Etag変更検知
-          if oldEtag != nowEtag:
+          #Etag変更確認
+          #変更がなければスキップ
+          if oldEtag == nowEtag:
+            #pageToken while から離脱
+            break
+
+          #変更があれば継続＆DB更新
+          else:
             #データベース更新
             qnly.DBSQL(DATABASE_URL, f"UPDATE playlists SET etag='{nowEtag}' WHERE id='{plId}'")
-            #Discord変更通知対象追記
-            changedPls.append(plId)
+
       
 
       #videoIdの数だけ繰り返し
@@ -388,13 +397,13 @@ try:
                               if nowSubsOverThousand == "0":
                                   nowSubsOverThousandStr = ""
                               else:
-                                  nowSubsOverThousandStr = f'{nowSubsOverThousand}千'
+                                  nowSubsOverThousandStr = str(nowSubs)[-4:]
                           
                               #文末生成
                               #X十万人丁度なら
                               if str(nowSubs)[-5] == "00000":
-                                  subsCongFirstStr = "㊗️"
-                                  subsCongLastStr = "🥳"
+                                  subsCongFirstStr = "㊗️🎊"
+                                  subsCongLastStr = "🎉🥳"
                               #X万人丁度なら
                               elif str(nowSubs)[-4:] == "0000":
                                   subsCongFirstStr = "🎊"
@@ -420,7 +429,7 @@ try:
           #ツイート文形成
           """
           《登録者数**人突破!》 <<<更新がある場合のみ/改行コードも含める
-          🍌配信予定情報🌟
+          🍌配信予定情報🌟  <<<絵文字はDBから取得しTrueの項目があれば使用
           〈動画タイトル〉
           youtu.be/[videoId]
           M月dd日 h時mm分 配信開始予定 <<<tweetTimeTextに改行コードも含める
@@ -428,11 +437,29 @@ try:
           """
 
           successTweet = False
+
+          leftEmoji = "🍌"
+          rightEmoji = "🌟"
+          try:
+            #通知タイトル絵文字取得
+            emojiList = qnly.DBSQL(DATABASE_URL, 'SELECT * FROM emoji', True)
+            
+            #リストの項目数繰り返し
+            for emoji in emojiList:
+              if emoji[2] == True:
+                leftEmoji = emoji[0]
+                rightEmoji = emoji[1]
+                break
+
+          except Exception as e:
+            print("emoji get error.")
+
+
           
           #ツイートエラー時は動画タイトルを最初の20文字に制限・お知らせ文なしでリトライ
           for trycount in range(2):
             if not successTweet:
-              tweetText = f'{tweetSubsInfoText}{addTweetTitle}🍌{tweetTitle}🌟\n{videoTitle}\nyoutu.be/{taskVideoId}{tweetTimeText}{tweetInfoText}'
+              tweetText = f'{tweetSubsInfoText}{addTweetTitle}{leftEmoji}{tweetTitle}{rightEmoji}\n{videoTitle}\nyoutu.be/{taskVideoId}{tweetTimeText}{tweetInfoText}'
               pram = {'text':tweetText}
               
               #ツイート送信
@@ -505,12 +532,6 @@ try:
           qnly.DBSQL(DATABASE_URL, f"DELETE FROM waiting WHERE id='{taskVideoId}'")
         qnly.DBSQL(DATABASE_URL, f"INSERT INTO videoids (id) VALUES ('{taskVideoId}')")
         sendDCText = f'**Get data is not live now.**\nhttps://youtu.be/{taskVideoId}\n> GetAt: {time}'
-
-  if len(changedPls) != 0:
-    sendDCText = '**Playlist is changed.**'
-    for cPl in changedPls:
-      sendDCText += f'\n> https://www.youtube.com/playlist?list={cPl}'
-    qnly.sendDiscord(DC_URL, sendDCText)
 
 except Exception as e:
   print('runningError')
